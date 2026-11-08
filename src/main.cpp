@@ -112,7 +112,11 @@ void leerSensor() {
   float humedad = 0;
   if (sensor.readMeasurement(co2, temperatura, humedad) != 0 || co2 == 0) return;
 
-  ultima = {co2, temperatura, humedad, segundos(), true};
+  ultima.co2 = co2;
+  ultima.temperatura = temperatura;
+  ultima.humedad = humedad;
+  ultima.momento = segundos();
+  ultima.valida = true;
   historial.agregar(co2, ultima.momento);
   mostrarLed(semaforo.actualizar(co2));
   if (semaforo.recienAlto() && !alarmaSilenciada) pitar(3);
