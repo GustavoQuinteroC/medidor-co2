@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://gustavoquintero.dev; connect-src 'self'; base-uri 'self'; form-action 'none'">
+<title>Medidor de CO₂ con ESP32 | Gustavo Quintero</title>
+<meta name="description" content="Firmware abierto para un medidor de CO₂ con ESP32 y sensor SCD41: semáforo, alarma, pantalla y panel web con 24 horas de historial. Se instala desde el navegador.">
+<meta name="theme-color" content="#081236">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fondo: #eef3ff; --superficie: #f8faff; --tinta: #0b1a4a; --tinta-2: #44527a; --linea: #d0daf2;
+    --noche: #081236; --noche-2: #0f1f57; --hielo: #eaf0ff; --hielo-2: #a9b8e6; --rey: #2350ff; --rey-hover: #1636c7;
+    --bueno: #00c389; --ventilar: #f5a524; --alto: #e5484d;
+    --fuente: "Geist", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "Geist Mono", ui-monospace, Menlo, monospace; --ancho: 1180px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fondo: #060d29; --superficie: #0c1640; --tinta: #eaf0ff; --tinta-2: #a9b8e6; --linea: #1d2c66; --rey: #5b7cff; --rey-hover: #7f99ff; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--fondo); color: var(--tinta); font-family: var(--fuente); line-height: 1.6; }
+  a { color: inherit; }
+  code { font-family: var(--mono); font-size: .9em; }
+  :focus-visible { outline: 3px solid var(--rey); outline-offset: 3px; border-radius: 6px; }
+  .ancho { width: min(100% - 32px, var(--ancho)); margin-inline: auto; }
+  .cabecera { background-color: var(--noche); background-image: radial-gradient(rgba(169,184,230,.16) 1px, transparent 1px); background-size: 22px 22px; color: var(--hielo); padding: 24px 0 72px; }
+  .barra { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .firma { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; font-weight: 600; white-space: nowrap; }
+  .firma__foto { width: 38px; height: 38px; border-radius: 12px; object-fit: cover; box-shadow: 0 0 0 2px var(--rey); }
+  .barra__enlaces { display: flex; gap: 22px; font-size: .95rem; }
+  .barra__enlaces a { color: var(--hielo-2); text-decoration: none; }
+  .barra__enlaces a:hover { color: #fff; }
+  .portada { margin-top: 52px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 48px; align-items: center; }
+  .portada > * { min-width: 0; }
+  h1 { font-size: clamp(2.3rem, 5.2vw, 3.9rem); line-height: 1.03; letter-spacing: -.045em; font-weight: 700; }
+  .portada p { margin-top: 18px; font-size: 1.15rem; color: var(--hielo-2); max-width: 54ch; }
+  .acciones { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .boton { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 14px; font: 600 1rem var(--fuente); text-decoration: none; cursor: pointer; border: 1px solid transparent; }
+  .boton--primario { background: #2350ff; color: #fff; }
+  .boton--primario:hover { background: #1636c7; }
+  .boton--secundario { border-color: #2a3c86; color: var(--hielo); }
+  .boton--secundario:hover { border-color: var(--hielo-2); }
+
+  /* El aparato: réplica en CSS del medidor armado. La lectura sube y el LED cambia de color. */
+  .aparato { --led: var(--bueno); background: linear-gradient(160deg, #e9eefb, #c9d3ee); border-radius: 30px; padding: 26px; box-shadow: 0 40px 80px -40px rgba(0,0,0,.7), inset 0 2px 0 rgba(255,255,255,.7); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; color: #0b1a4a; }
+  .aparato[data-nivel="ventilar"] { --led: var(--ventilar); }
+  .aparato[data-nivel="alto"] { --led: var(--alto); }
+  .pantalla { background: #02040c; border-radius: 10px; padding: 18px 18px 14px; border: 6px solid #1a2140; font-family: var(--mono); color: #cfe3ff; min-height: 160px; }
+  .pantalla__ppm { font-size: clamp(2.6rem, 6vw, 3.6rem); font-weight: 700; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .pantalla__ppm small { font-size: .9rem; font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+  .pantalla__consejo { margin-top: 12px; font-size: 1.15rem; font-weight: 600; }
+  .pantalla__datos { margin-top: 10px; font-size: .78rem; color: #8ea3cf; display: flex; justify-content: space-between; }
+  .lateral { display: grid; justify-items: center; gap: 14px; }
+  .led { width: 26px; height: 26px; border-radius: 50%; background: var(--led); box-shadow: 0 0 22px 6px color-mix(in srgb, var(--led) 70%, transparent); transition: background .3s, box-shadow .3s; }
+  .rejilla { width: 34px; display: grid; gap: 5px; }
+  .rejilla span { height: 4px; border-radius: 2px; background: #9aa7cb; }
+  .aparato__marca { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: .78rem; color: #44527a; }
+
+  main { padding: 56px 0 72px; display: grid; gap: 64px; }
+  .seccion h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -.03em; line-height: 1.1; max-width: 22ch; }
+  .seccion > p { margin-top: 12px; color: var(--tinta-2); max-width: 64ch; }
+  .niveles { margin-top: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .nivel { background: var(--superficie); border: 1px solid var(--linea); border-radius: 20px; padding: 22px; border-top: 6px solid var(--color); }
+  .nivel b { display: block; font: 700 1.6rem var(--mono); letter-spacing: -.02em; }
+  .nivel strong { display: block; margin-top: 4px; font-size: 1.05rem; }
+  .nivel p { margin-top: 6px; color: var(--tinta-2); font-size: .95rem; }
+  .dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; margin-top: 24px; }
+  .tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: 20px; padding: 22px; min-width: 0; }
+  .tarjeta h3 { font-size: 1.1rem; letter-spacing: -.01em; }
+  .tarjeta p, .tarjeta li { color: var(--tinta-2); font-size: .95rem; }
+  .tarjeta ul { margin-top: 10px; padding-left: 1.1em; display: grid; gap: 6px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .93rem; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+  th { font-size: .8rem; color: var(--tinta-2); font-weight: 600; }
+  pre { margin-top: 12px; background: var(--noche); color: var(--hielo); border-radius: 14px; padding: 14px; font: .8rem/1.6 var(--mono); overflow-x: auto; }
+  .instalar { background: var(--noche); color: var(--hielo); border-radius: 28px; padding: 34px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 32px; align-items: start; }
+  .instalar h2 { color: #fff; }
+  .instalar > div > p { margin-top: 12px; color: var(--hielo-2); }
+  .instalar ol { margin-top: 18px; padding-left: 1.2em; display: grid; gap: 10px; color: var(--hielo); }
+  .instalar ol span { color: var(--hielo-2); display: block; font-size: .93rem; }
+  .instalador { background: var(--noche-2); border: 1px solid #1b2c70; border-radius: 20px; padding: 24px; display: grid; gap: 14px; }
+  .instalador p { color: var(--hielo-2); font-size: .93rem; }
+  esp-web-install-button button[slot="activate"] { font: 600 1rem var(--fuente); background: #2350ff; color: #fff; border: 0; border-radius: 14px; padding: 13px 22px; cursor: pointer; width: 100%; }
+  esp-web-install-button button[slot="activate"]:hover { background: #1636c7; }
+  .aviso { font-size: .9rem; color: #f6c27a; }
+  .nota { font-size: .85rem; color: var(--hielo-2); border-top: 1px solid #1b2c70; padding-top: 12px; }
+  .pie { border-top: 1px solid var(--linea); padding: 22px 0 28px; font-size: .92rem; color: var(--tinta-2); }
+  .pie .ancho { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+  @media (max-width: 900px) { .portada, .dos, .instalar { grid-template-columns: minmax(0, 1fr); } .niveles { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 560px) { .instalar, .aparato { padding: 20px; border-radius: 22px; } .barra__enlaces { gap: 14px; font-size: .9rem; } }
+  @media (max-width: 420px) { .solo-ancho { display: none; } .barra__enlaces { gap: 12px; font-size: .86rem; } .firma { gap: 9px; } .aparato { grid-template-columns: minmax(0, 1fr); } .lateral { grid-auto-flow: column; justify-content: start; align-items: center; } .rejilla { display: none; } }
+</style>
+</head>
+<body>
+  <header class="cabecera">
+    <div class="ancho">
+      <nav class="barra" aria-label="Principal">
+        <a class="firma" href="https://gustavoquintero.dev"><img class="firma__foto" src="https://gustavoquintero.dev/assets/img/gustavo-quintero-96.jpg" width="38" height="38" alt="">Gustavo Quintero</a>
+        <div class="barra__enlaces">
+          <a href="../">Herramientas</a>
+          <a class="solo-ancho" href="https://gustavoquintero.dev">CV</a>
+          <a href="https://github.com/GustavoQuinteroC/medidor-co2" rel="noopener">Código</a>
+        </div>
+      </nav>
+      <div class="portada">
+        <div>
+          <h1>Medidor de CO₂ para salones y oficinas</h1>
+          <p>Un ESP32 con sensor Sensirion SCD41 mide el CO₂ que se acumula al respirar en un cuarto cerrado y avisa con un semáforo cuándo abrir la ventana. Sirve un panel web con las últimas 24 horas y se instala desde el navegador.</p>
+          <div class="acciones">
+            <a class="boton boton--primario" href="#instalar">Instalar en un ESP32</a>
+            <a class="boton boton--secundario" href="https://github.com/GustavoQuinteroC/medidor-co2" rel="noopener">Ver el código</a>
+          </div>
+        </div>
+        <div class="aparato" id="aparato" data-nivel="bueno" role="img" aria-label="Medidor de CO₂: la lectura sube de 610 a 1,240 ppm y el LED pasa de verde a rojo">
+          <div class="pantalla" aria-hidden="true">
+            <div class="pantalla__ppm"><span id="ppm">610</span><small>ppm</small></div>
+            <div class="pantalla__consejo" id="consejo">Aire bueno</div>
+            <div class="pantalla__datos"><span>23.4 C  48%</span><span>WiFi</span></div>
+          </div>
+          <div class="lateral" aria-hidden="true">
+            <span class="led"></span>
+            <span class="rejilla"><span></span><span></span><span></span><span></span></span>
+          </div>
+          <div class="aparato__marca" aria-hidden="true"><span>SCD41 · ESP32</span><span>medidor-co2.local</span></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="ancho">
+    <section class="seccion" aria-labelledby="titulo-niveles">
+      <h2 id="titulo-niveles">Tres colores, una sola decisión: ¿abro o no?</h2>
+      <p>El aire de afuera tiene cerca de 420 ppm de CO₂. En un cuarto cerrado con gente sube cada minuto. Los umbrales son los que se usan con frecuencia para salones y oficinas; se cambian en el código.</p>
+      <div class="niveles">
+        <div class="nivel" style="--color: var(--bueno)"><b>&lt; 800 ppm</b><strong>Aire bueno</strong><p>LED verde. No hay que hacer nada.</p></div>
+        <div class="nivel" style="--color: var(--ventilar)"><b>800 – 1,199</b><strong>Abre una ventana</strong><p>LED ámbar. Conviene ventilar pronto.</p></div>
+        <div class="nivel" style="--color: var(--alto)"><b>≥ 1,200 ppm</b><strong>Ventila ya</strong><p>LED rojo y tres pitidos, una sola vez por subida. El botón BOOT lo silencia.</p></div>
+      </div>
+    </section>
+
+    <section class="seccion" aria-labelledby="titulo-hace">
+      <h2 id="titulo-hace">Qué hace el firmware</h2>
+      <div class="dos">
+        <div class="tarjeta">
+          <h3>En el aparato</h3>
+          <ul>
+            <li>Lectura de CO₂, temperatura y humedad cada 5 segundos.</li>
+            <li>Semáforo con histéresis: para bajar de nivel debe quedar 50 ppm debajo del umbral, así el LED no parpadea en el límite.</li>
+            <li>Sigue midiendo sin WiFi: pantalla, LED y alarma no dependen de la red.</li>
+            <li>Calibración forzada a 420 ppm junto a una ventana abierta.</li>
+          </ul>
+        </div>
+        <div class="tarjeta">
+          <h3>En tu red</h3>
+          <ul>
+            <li>Portal para elegir el WiFi desde el celular la primera vez.</li>
+            <li>Panel en <code>http://medidor-co2.local</code> con gráfica de 24 horas, sin internet ni servicios externos.</li>
+            <li>API JSON para conectarlo a otro sistema:</li>
+          </ul>
+<pre><code>GET /api/lectura
+{"valida":true,"co2":812,"temperatura":23.4,"humedad":48,
+ "nivel":"ventilar","consejo":"Abre una ventana","hace":2}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="seccion" aria-labelledby="titulo-piezas">
+      <h2 id="titulo-piezas">Piezas y conexiones</h2>
+      <p>Todo va al mismo bus I2C, así que solo son cuatro cables al sensor y a la pantalla.</p>
+      <div class="dos">
+        <div class="tarjeta">
+          <h3>Piezas</h3>
+          <table>
+            <thead><tr><th>Pieza</th><th>Para qué</th></tr></thead>
+            <tbody>
+              <tr><td>ESP32 DevKit (WROOM-32)</td><td>Microcontrolador con WiFi</td></tr>
+              <tr><td>Sensirion SCD41</td><td>CO₂ real (fotoacústico), temperatura y humedad</td></tr>
+              <tr><td>OLED SSD1306 0.96"</td><td>Lectura en el aparato</td></tr>
+              <tr><td>LED WS2812</td><td>Semáforo</td></tr>
+              <tr><td>Zumbador activo (opcional)</td><td>Aviso al llegar a rojo</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tarjeta">
+          <h3>Conexiones</h3>
+          <table>
+            <thead><tr><th>Pieza</th><th>Pin</th><th>ESP32</th></tr></thead>
+            <tbody>
+              <tr><td>SCD41 y OLED</td><td>SDA</td><td><code>GPIO21</code></td></tr>
+              <tr><td>SCD41 y OLED</td><td>SCL</td><td><code>GPIO22</code></td></tr>
+              <tr><td>SCD41 y OLED</td><td>VCC / GND</td><td><code>3V3</code> / <code>GND</code></td></tr>
+              <tr><td>WS2812</td><td>DIN</td><td><code>GPIO4</code> (VIN 5 V)</td></tr>
+              <tr><td>Zumbador</td><td>+</td><td><code>GPIO25</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="instalar" id="instalar" aria-labelledby="titulo-instalar">
+      <div>
+        <h2 id="titulo-instalar">Instálalo desde el navegador</h2>
+        <p>Sin instalar programas: el navegador graba el firmware por USB.</p>
+        <ol>
+          <li>Conecta el ESP32 con un cable USB de datos.<span>Algunos cables solo cargan; si no aparece el puerto, prueba otro.</span></li>
+          <li>Presiona Instalar y elige el puerto del ESP32.<span>Suele llamarse CP210x o CH340.</span></li>
+          <li>Cuando termine, conéctate a la red <code>medidor-co2</code> desde el celular.<span>Elige tu WiFi y escribe su contraseña.</span></li>
+          <li>Abre <code>http://medidor-co2.local</code>.<span>O la IP que muestre tu router para el aparato.</span></li>
+        </ol>
+      </div>
+      <div class="instalador">
+        <esp-web-install-button manifest="manifest.json">
+          <button slot="activate">Instalar el firmware</button>
+          <p slot="unsupported" class="aviso">Tu navegador no puede grabar por USB. Usa Chrome o Edge en una computadora de escritorio.</p>
+          <p slot="not-allowed" class="aviso">La instalación necesita una página con HTTPS.</p>
+        </esp-web-install-button>
+        <p>También se puede grabar con PlatformIO: <code>pio run -e esp32dev -t upload</code>.</p>
+        <p class="nota">El firmware se compila y su lógica se prueba automáticamente en cada cambio. Aún no se ha probado en un aparato armado.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pie">
+    <div class="ancho">
+      <span>Gustavo Quintero · Guadalajara</span>
+      <a href="https://github.com/GustavoQuinteroC/medidor-co2" rel="noopener">Código abierto con licencia MIT</a>
+    </div>
+  </footer>
+  <script src="js/aparato.js" defer></script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/esp-web-tools@10.4.0/dist/web/install-button.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "Medidor de CO₂",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [{ "path": "firmware/medidor-co2.bin", "offset": 0 }]
+    }
+  ]
+}
