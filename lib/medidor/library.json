@@ -1,0 +1,7 @@
+{
+  "name": "medidor",
+  "version": "1.0.0",
+  "description": "Lógica del medidor de CO₂ sin dependencias de hardware: semáforo con histéresis e historial de 24 horas.",
+  "frameworks": "*",
+  "platforms": "*"
+}

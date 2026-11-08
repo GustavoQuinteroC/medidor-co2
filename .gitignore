@@ -1,0 +1,6 @@
+.pio/
+.vscode/
+dist/
+CLAUDE.md
+AGENTS.md
+.env
