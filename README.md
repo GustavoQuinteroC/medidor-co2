@@ -60,7 +60,7 @@ pio test -e native     # semáforo con histéresis e historial de 24 h, en la PC
 pio run -e esp32dev    # firmware
 ```
 
-La lógica que no depende del hardware vive en `lib/medidor/` y se prueba en la PC con Unity. GitHub Actions corre esas pruebas, compila el firmware y, al etiquetar una versión, publica en Releases la imagen completa (`medidor-co2.bin`) que usa el botón de instalar del sitio.
+La lógica que no depende del hardware vive en `lib/medidor/` y se prueba en la PC con Unity. GitHub Actions corre esas pruebas, compila el firmware y, al etiquetar una versión, publica en Releases la imagen completa (`medidor-co2.bin`) que usa el botón de instalar del sitio. El botón usa [ESP Web Tools](https://github.com/esphome/esp-web-tools) (Apache-2.0); `herramientas/instalador-es.py` lo descarga y traduce sus textos al español al armar el sitio.
 
 **Estado:** el firmware compila y la lógica tiene pruebas automáticas; aún no se ha probado en un aparato armado.
 
